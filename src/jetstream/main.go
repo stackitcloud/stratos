@@ -789,6 +789,8 @@ func start(config api.PortalConfig, p *portalProxy, needSetupMiddleware bool, is
 	}))
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
 		XFrameOptions: "SAMEORIGIN",
+		HSTSMaxAge: 16000000,
+		HSTSExcludeSubdomains: true,
 	}))
 
 	if !isUpgrade {
