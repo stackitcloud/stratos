@@ -18,7 +18,11 @@ export const getRoute = (
 ) => {
   let protocol = '';
   if (browsable) {
-    protocol = secure ? 'https://' : 'http://';
+    // protocol = secure ? 'https://' : 'http://';
+    // - WORKAROUND
+    // We only support secure access, so we show only this scheme
+    // The reason for this change is to only alter one place
+    protocol = 'https://';
   }
   if (routePort) {
     // Note: Hostname and path are not supported for TCP routes
