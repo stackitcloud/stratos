@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/stratos/src/jetstream/custombinder"
-	_ "github.com/cloudfoundry/stratos/src/jetstream/docs"
 
 	"github.com/antonlindstrom/pgstore"
 	"github.com/cf-stratos/mysqlstore"
@@ -789,6 +788,8 @@ func start(config api.PortalConfig, p *portalProxy, needSetupMiddleware bool, is
 	}))
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
 		XFrameOptions: "SAMEORIGIN",
+		HSTSMaxAge: 16000000,
+		HSTSExcludeSubdomains: true,
 	}))
 
 	if !isUpgrade {
