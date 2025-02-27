@@ -1,8 +1,8 @@
 module github.com/cloudfoundry/stratos/src/jetstream/plugins/monocular
 
-go 1.22
+go 1.21
 
-toolchain go1.24.0
+toolchain go1.21.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.2.1

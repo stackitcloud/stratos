@@ -1,8 +1,8 @@
 module github.com/cloudfoundry/stratos/src/jetstream/plugins/kubernetes
 
-go 1.22
+go 1.21
 
-toolchain go1.24.0
+toolchain go1.21.5
 
 require (
 	github.com/cloudfoundry/stratos/src/jetstream/api v0.0.0-00010101000000-000000000000
