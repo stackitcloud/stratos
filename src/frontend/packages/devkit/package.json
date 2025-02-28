@@ -11,7 +11,7 @@
   "dependencies": {
     "@angular-devkit/core": "^9.1.7",
     "@angular-devkit/schematics": "^9.1.7",
-    "typescript": "~3.8.2"
+    "typescript": "~3.9.10"
   },
   "devDependencies": {
     "@angular-devkit/architect": "^0.901.7"
