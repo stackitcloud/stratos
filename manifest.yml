@@ -4,7 +4,7 @@ applications:
     disk_quota: 1024M
     host: console
     timeout: 180
-    buildpack: https://github.com/cloudfoundry/stratos-buildpack#v5
+    buildpack: https://github.com/stackitcloud/stratos-buildpack#v6
     health-check-type: port
     instances: 2
 #    env:
