@@ -73,10 +73,11 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 		return sendSSHError("Can not get Cloud Foundry info")
 	}
 
-	cfInfo, found := info.(api.V2Info)
+	cfInfoEndpoint, found := info.(api.EndpointInfo)
 	if !found {
-		return sendSSHError("Can not get Cloud Foundry info")
+		return sendSSHError("Can not get Cloud Foundry Endpoint info")
 	}
+	cfInfo := cfInfoEndpoint.V2Info
 
 	appGUID := c.Param("appGuid")
 	appInstance := c.Param("appInstance")
