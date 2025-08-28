@@ -9,22 +9,17 @@ import (
 	"testing"
 
 	"github.com/cloudfoundry/stratos/src/jetstream/plugins/cfappssh"
-	"github.com/labstack/echo/v4"
 )
-
-type FakeContext struct {
-	echo.Context
-}
 
 func TestCheckForV3Availability(t *testing.T) {
 	expectedProcessID := "i-am-process-id"
 	appGUID := "some-guid"
 
-	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		appWebProcess := map[string]string{
 			"AppGUID": "one two three",
-			"guid": "i-am-process-id",
-			"Type": "web",
+			"guid":    "i-am-process-id",
+			"Type":    "web",
 		}
 		re := regexp.MustCompile("^/v3")
 
@@ -48,7 +43,7 @@ func TestCheckForV3Availability(t *testing.T) {
 	apiClient := http.Client{}
 	processID, err := cfappssh.CheckForV3AvailabilityAndReturnProcessID(appGUID, testServer.URL, "","", apiClient)
 	if err != nil {
-		t.Errorf("I didn't expect that: %s",err)
+		t.Errorf("I didn't expect that: %s", err)
 	}
 	if processID != expectedProcessID {
 		t.Errorf("the value should have changed to %s but was %s", expectedProcessID, appGUID)
@@ -62,6 +57,7 @@ func TestV2InstanceWebProcessSSH(t *testing.T) {
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		re := regexp.MustCompile("^/v3")
+		t.Log("path", r.URL.Path, "method", r.Method)
 
 		if re.Match([]byte(r.URL.Path)) && r.Method == http.MethodHead {
 			w.WriteHeader(http.StatusNotFound)
@@ -73,7 +69,7 @@ func TestV2InstanceWebProcessSSH(t *testing.T) {
 	apiClient := http.Client{}
 	processID, err := cfappssh.CheckForV3AvailabilityAndReturnProcessID(appGUID, testServer.URL, "","", apiClient)
 	if err != nil {
-		t.Errorf("I didn't expect that: %s",err)
+		t.Errorf("I didn't expect that: %s", err)
 	}
 	if processID != expectedProcessID {
 		t.Errorf("the value should NOT have changed. expected %s but was %s", expectedProcessID, processID)

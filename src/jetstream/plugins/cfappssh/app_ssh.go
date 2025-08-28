@@ -46,6 +46,8 @@ type KeyCode struct {
 	Rows int    `json:"rows"`
 }
 
+// When dealing with a v3 enabled cf api, we need to use the processID to build the username to create an SSH
+// connection to the app instances web process.
 func CheckForV3AvailabilityAndReturnProcessID(appID, baseURL, clientID, token string, apiClient http.Client) (string, error) {
 	resp, err := apiClient.Head(fmt.Sprintf("%s/%s", baseURL, "v3"))
 	if resp.StatusCode == http.StatusNotFound {
@@ -63,10 +65,10 @@ func CheckForV3AvailabilityAndReturnProcessID(appID, baseURL, clientID, token st
 		defer resp.Body.Close()
 		respBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return appID, sendSSHError("failed reading response for '%s': %s", resp.Request.URL.Path , err)
+			return appID, sendSSHError("failed reading response for '%s': %s", resp.Request.URL.Path, err)
 		}
-	    appWebProcess := &cloudFoundryResource.Process{}
-		err = appWebProcess.UnmarshalJSON(respBytes);
+		appWebProcess := &cloudFoundryResource.Process{}
+		err = appWebProcess.UnmarshalJSON(respBytes)
 		if err != nil {
 			return appID, sendSSHError("failed unmarshaling response: '%s' for app_guid '%s': %s", string(respBytes), appID, err)
 		}
@@ -96,7 +98,6 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 	apiEndpoint := cnsiRecord.APIEndpoint
 
 	cfPlugin, err := p.GetEndpointTypeSpec("cf")
-
 	if err != nil {
 		return sendSSHError("Can not get Cloud Foundry endpoint plugin")
 	}
@@ -111,7 +112,6 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 		return sendSSHError("Can not get Cloud Foundry Endpoint info")
 	}
 	cfInfo := cfInfoEndpoint.V2Info
-
 	appOrProcessGUID := c.Param("appGuid")
 
 	// Refresh token first - makes sure it will be valid when we make the request to get the code
