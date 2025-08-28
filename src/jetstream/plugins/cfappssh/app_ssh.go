@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	cloudFoundryResource "code.cloudfoundry.org/cli/resources"
 	"github.com/cloudfoundry/stratos/src/jetstream/api"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
@@ -45,6 +46,37 @@ type KeyCode struct {
 	Rows int    `json:"rows"`
 }
 
+func CheckForV3AvailabilityAndReturnProcessID(appID, baseURL, clientID, token string, apiClient http.Client) (string, error) {
+	resp, err := apiClient.Head(fmt.Sprintf("%s/%s", baseURL, "v3"))
+	if resp.StatusCode == http.StatusNotFound {
+		return appID, nil
+	}
+	if resp.StatusCode == http.StatusOK {
+    	processRequest, err := prepareRequest(baseURL, clientID, token, fmt.Sprintf("/v3/apps/%s/processes/web", appID))
+		if err != nil {
+			return appID, sendSSHError("failed preparing v3 request: %s", err)
+		}
+		resp, err := apiClient.Do(processRequest)
+		if err != nil {
+			return appID, sendSSHError("failed checking for processes of app_guid %s => '%s': %s", processRequest.URL.Path, appID, err)
+		}
+		defer resp.Body.Close()
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return appID, sendSSHError("failed reading response for '%s': %s", resp.Request.URL.Path , err)
+		}
+	    appWebProcess := &cloudFoundryResource.Process{}
+		err = appWebProcess.UnmarshalJSON(respBytes);
+		if err != nil {
+			return appID, sendSSHError("failed unmarshaling response: '%s' for app_guid '%s': %s", string(respBytes), appID, err)
+		}
+		if appWebProcess.GUID == "" {
+			return appID, sendSSHError("the processID returned was empty: %s", string(respBytes))
+		}
+		return appWebProcess.GUID, nil
+	}
+	return appID, err
+}
 func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 	// Need to get info for the endpoint
 	// Get the CNSI and app IDs from route parameters
@@ -64,6 +96,7 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 	apiEndpoint := cnsiRecord.APIEndpoint
 
 	cfPlugin, err := p.GetEndpointTypeSpec("cf")
+
 	if err != nil {
 		return sendSSHError("Can not get Cloud Foundry endpoint plugin")
 	}
@@ -79,7 +112,22 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 	}
 	cfInfo := cfInfoEndpoint.V2Info
 
-	appGUID := c.Param("appGuid")
+	appOrProcessGUID := c.Param("appGuid")
+
+	// Refresh token first - makes sure it will be valid when we make the request to get the code
+	refreshedTokenRec, err := p.RefreshOAuthToken(cnsiRecord.SkipSSLValidation, cnsiRecord.GUID, userGUID, cnsiRecord.ClientId, cnsiRecord.ClientSecret, cnsiRecord.TokenEndpoint)
+	if err != nil {
+		return sendSSHError("Couldn't get refresh token for CNSI with GUID %s", cnsiRecord.GUID)
+	}
+	// use processID instead of appGUID if we detect V3 availability. V3 apps can have multiple containers within one instance and therefore cannot use the appGUID
+	// because that appGUID could wrap multiple processIDs each with their own option to connect.
+	// Until full V3 support is added, this will allow targetting the WEB process only. This is not a limitation of the go code. It intentionally left out for now because
+	// the UI does not provide an option to choose the nested process container.
+	appOrProcessGUID, err = CheckForV3AvailabilityAndReturnProcessID(appOrProcessGUID, apiEndpoint.String(), cnsiRecord.ClientId, string(refreshedTokenRec.AuthToken), p.GetHttpClient(cnsiRecord.SkipSSLValidation, cnsiRecord.CACert))
+	if err != nil {
+		return sendSSHError("Failed checking for v3 app: %s", err)
+	}
+
 	appInstance := c.Param("appInstance")
 
 	host, _, err := net.SplitHostPort(cfInfo.AppSSHEndpoint)
@@ -89,36 +137,32 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 
 	// Build the Username
 	// cf:APP-GUID/APP-INSTANCE-INDEX@SSH-ENDPOINT
-	username := fmt.Sprintf("cf:%s/%s@%s", appGUID, appInstance, host)
+	username := fmt.Sprintf("cf:%s/%s@%s", appOrProcessGUID, appInstance, host)
 
 	// Need to get SSH Code
-	// Refresh token first - makes sure it will be valid when we make the request to get the code
-	refreshedTokenRec, err := p.RefreshOAuthToken(cnsiRecord.SkipSSLValidation, cnsiRecord.GUID, userGUID, cnsiRecord.ClientId, cnsiRecord.ClientSecret, cnsiRecord.TokenEndpoint)
-	if err != nil {
-		return sendSSHError("Couldn't get refresh token for CNSI with GUID %s", cnsiRecord.GUID)
-	}
+
 
 	code, err := getSSHCode(cnsiRecord.TokenEndpoint, cfInfo.AppSSHOauthCLient, refreshedTokenRec.AuthToken, cnsiRecord.SkipSSLValidation)
 	if err != nil {
 		return sendSSHError("Couldn't get SSH Code: %s", err)
 	}
-
 	sshConfig := &ssh.ClientConfig{
 		User: username,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(code),
 		},
+
 		HostKeyCallback: sshHostKeyChecker(cfInfo.AppSSHHostKeyFingerprint),
 	}
 
 	connection, err := ssh.Dial("tcp", cfInfo.AppSSHEndpoint, sshConfig)
 	if err != nil {
-		return fmt.Errorf("Failed to dial: %s", err)
+		return sendSSHError("Failed to dial '%s': %s", username, err)
 	}
 
 	session, err := connection.NewSession()
 	if err != nil {
-		return fmt.Errorf("Failed to create session: %s", err)
+		return sendSSHError("Failed to create session: %s", err)
 	}
 
 	defer connection.Close()
@@ -139,17 +183,17 @@ func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 	// NB: rows, cols
 	if err := session.RequestPty("xterm", 84, 80, modes); err != nil {
 		session.Close()
-		return fmt.Errorf("request for pseudo terminal failed: %s", err)
+		return sendSSHError("request for pseudo terminal failed: %s", err)
 	}
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("Unable to setup stdin for session: %v", err)
+		return sendSSHError("Unable to setup stdin for session: %v", err)
 	}
 
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("Unable to setup stdout for session: %v", err)
+		return sendSSHError("Unable to setup stdout for session: %v", err)
 	}
 
 	defer session.Close()
@@ -187,7 +231,7 @@ func sendSSHError(format string, a ...interface{}) error {
 	} else {
 		log.Errorf("App SSH Error: "+format, a)
 	}
-	return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf(format, a...))
+	return echo.NewHTTPError(http.StatusInternalServerError, fmt.Errorf(format, a...))
 }
 
 func sshHostKeyChecker(fingerprint string) ssh.HostKeyCallback {
@@ -256,10 +300,10 @@ func pumpStdout(ws *websocket.Conn, r io.Reader, done chan struct{}) {
 // ErrPreventRedirect - Error to indicate a redirect - used to make a redirect that we want to prevent later
 var ErrPreventRedirect = errors.New("prevent-redirect")
 
-func getSSHCode(authorizeEndpoint, clientID, token string, skipSSLValidation bool) (string, error) {
+func prepareRequest(authorizeEndpoint, clientID, token, path string) (*http.Request, error) {
 	authorizeURL, err := url.Parse(authorizeEndpoint)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	values := url.Values{}
@@ -267,17 +311,20 @@ func getSSHCode(authorizeEndpoint, clientID, token string, skipSSLValidation boo
 	values.Set("grant_type", "authorization_code")
 	values.Set("client_id", clientID)
 
-	authorizeURL.Path += "/oauth/authorize"
+	authorizeURL.Path += path
 	authorizeURL.RawQuery = values.Encode()
 
 	authorizeReq, err := http.NewRequest("GET", authorizeURL.String(), nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	authorizeReq.Header.Add("authorization", "Bearer "+token)
 
-	httpClientWithoutRedirects := &http.Client{
+	return authorizeReq, nil
+}
+func getClientWithoutRedirects(skipSSLValidation bool) *http.Client{
+	return &http.Client{
 		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
 			return ErrPreventRedirect
 		},
@@ -291,6 +338,15 @@ func getSSHCode(authorizeEndpoint, clientID, token string, skipSSLValidation boo
 			TLSHandshakeTimeout: 10 * time.Second,
 		},
 	}
+}
+
+func getSSHCode(authorizeEndpoint, clientID, token string, skipSSLValidation bool) (string, error) {
+    authorizeReq, err := prepareRequest(authorizeEndpoint, clientID, token, "/oauth/authorize")
+	if err != nil {
+		return "", sendSSHError("Failed preparing request %s", err)
+	}
+	httpClientWithoutRedirects := getClientWithoutRedirects(skipSSLValidation)
+
 
 	resp, err := httpClientWithoutRedirects.Do(authorizeReq)
 	if resp != nil {
