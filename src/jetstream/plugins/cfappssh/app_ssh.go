@@ -52,31 +52,34 @@ func CheckForV3AvailabilityAndReturnProcessID(appID, baseURL, clientID, token st
 	if resp.StatusCode == http.StatusNotFound {
 		return appID, nil
 	}
-	if resp.StatusCode == http.StatusOK {
-    	processRequest, err := prepareRequest(baseURL, clientID, token, fmt.Sprintf("/v3/apps/%s/processes/web", appID))
-		if err != nil {
-			return appID, sendSSHError("failed preparing v3 request: %s", err)
-		}
-		resp, err := apiClient.Do(processRequest)
-		if err != nil {
-			return appID, sendSSHError("failed checking for processes of app_guid %s => '%s': %s", processRequest.URL.Path, appID, err)
-		}
-		defer resp.Body.Close()
-		respBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return appID, sendSSHError("failed reading response for '%s': %s", resp.Request.URL.Path, err)
-		}
-		appWebProcess := &cfresource.Process{}
-		err = appWebProcess.UnmarshalJSON(respBytes)
-		if err != nil {
-			return appID, sendSSHError("failed unmarshaling response: '%s' for app_guid '%s': %s", string(respBytes), appID, err)
-		}
-		if appWebProcess.GUID == "" {
-			return appID, sendSSHError("the processID returned was empty: %s", string(respBytes))
-		}
-		return appWebProcess.GUID, nil
+
+	if resp.StatusCode != http.StatusOK {
+		return appID, err
 	}
-	return appID, err
+
+    processRequest, err := prepareRequest(baseURL, clientID, token, fmt.Sprintf("/v3/apps/%s/processes/web", appID))
+	if err != nil {
+		return appID, sendSSHError("failed preparing v3 request: %s", err)
+	}
+	resp, err = apiClient.Do(processRequest)
+	if err != nil {
+		return appID, sendSSHError("failed checking for processes of app_guid %s => '%s': %s", processRequest.URL.Path, appID, err)
+	}
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return appID, sendSSHError("failed reading response for '%s': %s", resp.Request.URL.Path, err)
+	}
+	appWebProcess := &cfresource.Process{}
+	err = appWebProcess.UnmarshalJSON(respBytes)
+	if err != nil {
+		return appID, sendSSHError("failed unmarshaling response: '%s' for app_guid '%s': %s", string(respBytes), appID, err)
+	}
+	if appWebProcess.GUID == "" {
+		return appID, sendSSHError("the processID returned was empty: %s", string(respBytes))
+	}
+	return appWebProcess.GUID, nil
+
 }
 func (cfAppSsh *CFAppSSH) appSSH(c echo.Context) error {
 	// Need to get info for the endpoint
