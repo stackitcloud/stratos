@@ -10,8 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	cloudFoundryResource "code.cloudfoundry.org/cli/resources"
+	cfresource "code.cloudfoundry.org/cli/resources"
 	"github.com/cloudfoundry/stratos/src/jetstream/api"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
@@ -67,7 +66,7 @@ func CheckForV3AvailabilityAndReturnProcessID(appID, baseURL, clientID, token st
 		if err != nil {
 			return appID, sendSSHError("failed reading response for '%s': %s", resp.Request.URL.Path, err)
 		}
-		appWebProcess := &cloudFoundryResource.Process{}
+		appWebProcess := &cfresource.Process{}
 		err = appWebProcess.UnmarshalJSON(respBytes)
 		if err != nil {
 			return appID, sendSSHError("failed unmarshaling response: '%s' for app_guid '%s': %s", string(respBytes), appID, err)
