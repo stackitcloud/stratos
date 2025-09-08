@@ -53,8 +53,8 @@ func CheckForV3AvailabilityAndReturnProcessID(appID, baseURL, clientID, token st
 		return appID, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return appID, err
+	if resp.StatusCode != http.StatusOK || err != nil{
+		return appID, sendSSHError( "received unexpected error: '%w' or status: '%v' ",err, resp.StatusCode )
 	}
 
     processRequest, err := prepareRequest(baseURL, clientID, token, fmt.Sprintf("/v3/apps/%s/processes/web", appID))
