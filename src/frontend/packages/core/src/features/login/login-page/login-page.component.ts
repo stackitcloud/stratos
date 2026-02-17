@@ -157,8 +157,7 @@ export class LoginPageComponent implements OnInit, OnDestroy {
       this.setErrorMessage(auth);
     }
 
-    // Only accept well-known SSO Messages from Stratos to prevent phishing attacks.
-    if (!!ssoMessage && ssoMessage === "You have been logged out") { 
+    if (!!ssoMessage) {
       this.message = ssoMessage;
     }
   }
