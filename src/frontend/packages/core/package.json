@@ -15,7 +15,7 @@
     "@angular/material-moment-adapter": "^9.2.3",
     "@angular/platform-browser": "^9.1.6",
     "@angular/platform-browser-dynamic": "^9.1.6",
-    "@angular/platform-server": "^9.1.6",
+    "@angular/platform-server": "^19.2.22",
     "@angular/router": "^9.1.6",
     "@ngrx/effects": "^9.1.2",
     "@ngrx/router-store": "^9.1.2",
